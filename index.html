@@ -96,6 +96,23 @@ const firebaseConfig = {
   appId: "1:913420870988:web:683a8184fd87b9ea729be9",
   measurementId: "G-BDTVMFCJYM"
 };
+    let db;
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+    } catch (e) {
+      console.error("Firebase 初始化失敗：", e);
+    }
+
+    let allRecords = [];
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById('date').valueAsDate = new Date();
+      
+      if (!db) {
+        alert("Firebase 初始化失敗！請檢查你的 firebaseConfig 是否有填寫正確（需保留引號與逗號）。");
+        return;
+      }
     // 即時監聽 Firebase 資料庫變更
     db.collection("expenses").onSnapshot((snapshot) => {
       allRecords = [];
