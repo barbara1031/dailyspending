@@ -87,7 +87,6 @@
 
   <script>
     // ⚠️ 請務必將以下欄位替換為您在 Firebase Console 取得的真實 Key ⚠️
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyBZ0l-GOETrFWhM6C7Ku-JIvI8RWHXIF6A",
   authDomain: "dailyspending.firebaseapp.com",
@@ -97,7 +96,6 @@ const firebaseConfig = {
   appId: "1:913420870988:web:683a8184fd87b9ea729be9",
   measurementId: "G-BDTVMFCJYM"
 };
-
     // 即時監聽 Firebase 資料庫變更
     db.collection("expenses").onSnapshot((snapshot) => {
       allRecords = [];
