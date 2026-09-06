@@ -2,22 +2,28 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>代墊款記帳工具</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>代墊款管理工具</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; background: #f4f6f8; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 900px; margin: auto; background: #f4f6f8; color: #333; }
     .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
     .nav { display: flex; gap: 10px; margin-bottom: 20px; }
-    .nav button { padding: 10px 20px; cursor: pointer; border: none; background: #ddd; border-radius: 5px; font-weight: bold; }
+    .nav button { padding: 10px 20px; cursor: pointer; border: none; background: #e0e0e0; border-radius: 5px; font-weight: bold; transition: 0.2s; }
     .nav button.active { background: #007bff; color: white; }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
     th { background: #f0f0f0; }
-    .btn-edit { background: #ffc107; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; }
-    .btn-delete { background: #dc3545; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; }
+    .btn-edit { background: #ffc107; color: #000; border: none; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    .btn-delete { background: #dc3545; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    .form-group { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; align-items: center; }
+    .form-group input, .form-group select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    .btn-save { background: #28a745; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    .btn-cancel { background: #6c757d; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-weight: bold; }
   </style>
 
+  <!-- 正確載入 Firebase SDK (Compat 相容版本) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
@@ -25,26 +31,28 @@
 
   <h1>💰 代墊款管理工具</h1>
 
+  <!-- 分頁按鈕 -->
   <div class="nav">
     <button class="active" onclick="switchTab('tab-input', this)">📝 明細與編輯</button>
     <button onclick="switchTab('tab-payer', this)">🧑‍🤝‍🧑 代墊人統計</button>
     <button onclick="switchTab('tab-month', this)">📅 每月統計</button>
   </div>
 
+  <!-- 分頁一：輸入與明細列表 (支援新增/編輯/刪除) -->
   <div id="tab-input" class="tab-content active card">
     <h2 id="form-title">新增款項</h2>
     <input type="hidden" id="record-id">
-    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+    <div class="form-group">
       <input type="date" id="date" required>
       <input type="text" id="item" placeholder="款項名稱" required>
       <input type="number" id="amount" placeholder="金額" required>
       <select id="payer">
         <option value="小明">小明</option>
+        <option value="小華">小華</option>
         <option value="小美">小美</option>
-        <option value="公基金">公基金</option>
       </select>
-      <button onclick="saveRecord()" style="background: #28a745; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px;">儲存</button>
-      <button onclick="resetForm()" style="background: #6c757d; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px;">取消</button>
+      <button class="btn-save" onclick="saveRecord()">儲存</button>
+      <button class="btn-cancel" onclick="resetForm()">取消</button>
     </div>
 
     <h3>所有帳目明細</h3>
@@ -56,6 +64,7 @@
     </table>
   </div>
 
+  <!-- 分頁二：代墊人統計 -->
   <div id="tab-payer" class="tab-content card">
     <h2>代墊人總覽</h2>
     <table>
@@ -66,6 +75,7 @@
     </table>
   </div>
 
+  <!-- 分頁三：每月統計 -->
   <div id="tab-month" class="tab-content card">
     <h2>每月花費總覽</h2>
     <table>
@@ -77,7 +87,8 @@
   </div>
 
   <script>
-    // ⚠️ 請替換為您的 Firebase 設定 ⚠️
+    // ⚠️ 貼上後，請務必將以下欄位替換為您在 Firebase Console 取得的真實 Key ⚠️
+   // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyBZ0l-GOETrFWhM6C7Ku-JIvI8RWHXIF6A",
   authDomain: "dailyspending.firebaseapp.com",
@@ -88,28 +99,30 @@ const firebaseConfig = {
   measurementId: "G-BDTVMFCJYM"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-    
+    // 正確使用 firebase.initializeApp 避免 ReferenceError
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
     let allRecords = [];
 
-    // 初始化日期預設為今天
-    document.getElementById('date').valueAsDate = new Date();
+    // 頁面載入完成後將預設日期設為今天
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById('date').valueAsDate = new Date();
+    });
 
-    // 監聽 Firebase 資料庫變更 (即時同步)
+    // 即時監聽 Firebase 資料庫變更
     db.collection("expenses").onSnapshot((snapshot) => {
       allRecords = [];
       snapshot.forEach((doc) => {
         allRecords.push({ id: doc.id, ...doc.data() });
       });
       renderAll();
+    }, (error) => {
+      console.error("Firebase 讀取錯誤：", error);
+      alert("無法連接資料庫，請檢查 Firebase 設定檔與 Rules 安全規則是否有開啟寫入權限！");
     });
 
-    // 儲存或更新資料 (新增/編輯鍵)
+    // 儲存或修改資料
     function saveRecord() {
       const id = document.getElementById('record-id').value;
       const date = document.getElementById('date').value;
@@ -117,27 +130,34 @@ const analytics = getAnalytics(app);
       const amount = Number(document.getElementById('amount').value);
       const payer = document.getElementById('payer').value;
 
-      if (!date || !item || !amount) return alert("請填寫完整資訊！");
+      if (!date || !item || isNaN(amount) || amount <= 0) {
+        return alert("請完整填寫日期、款項名稱與金額！");
+      }
 
       const data = { date, item, amount, payer };
 
       if (id) {
-        // 編輯模式
-        db.collection("expenses").doc(id).update(data).then(() => resetForm());
+        // 編輯更新
+        db.collection("expenses").doc(id).update(data)
+          .then(() => resetForm())
+          .catch(err => alert("修改失敗：" + err.message));
       } else {
-        // 新增模式
-        db.collection("expenses").add(data).then(() => resetForm());
+        // 新增資料
+        db.collection("expenses").add(data)
+          .then(() => resetForm())
+          .catch(err => alert("新增失敗：" + err.message));
       }
     }
 
-    // 刪除資料 (刪除鍵)
+    // 刪除資料
     function deleteRecord(id) {
       if (confirm("確定要刪除這筆紀錄嗎？")) {
-        db.collection("expenses").doc(id).delete();
+        db.collection("expenses").doc(id).delete()
+          .catch(err => alert("刪除失敗：" + err.message));
       }
     }
 
-    // 載入資料到表單 (編輯)
+    // 點擊「編輯」填入資料
     function editRecord(id) {
       const item = allRecords.find(r => r.id === id);
       if (item) {
@@ -150,6 +170,7 @@ const analytics = getAnalytics(app);
       }
     }
 
+    // 重置表單
     function resetForm() {
       document.getElementById('record-id').value = '';
       document.getElementById('item').value = '';
@@ -194,7 +215,7 @@ const analytics = getAnalytics(app);
       // 3. 每月統計
       const monthSummary = {};
       allRecords.forEach(r => {
-        const month = r.date.substring(0, 7); // 格式 YYYY-MM
+        const month = r.date ? r.date.substring(0, 7) : '未知';
         monthSummary[month] = (monthSummary[month] || 0) + r.amount;
       });
 
