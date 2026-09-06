@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>代墊款記帳工具</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; background: #f4f6f8; }
+    .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .nav { display: flex; gap: 10px; margin-bottom: 20px; }
+    .nav button { padding: 10px 20px; cursor: pointer; border: none; background: #ddd; border-radius: 5px; font-weight: bold; }
+    .nav button.active { background: #007bff; color: white; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f0f0f0; }
+    .btn-edit { background: #ffc107; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; }
+    .btn-delete { background: #dc3545; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; }
+  </style>
+
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+  <h1>💰 代墊款管理工具</h1>
+
+  <div class="nav">
+    <button class="active" onclick="switchTab('tab-input', this)">📝 明細與編輯</button>
+    <button onclick="switchTab('tab-payer', this)">🧑‍🤝‍🧑 代墊人統計</button>
+    <button onclick="switchTab('tab-month', this)">📅 每月統計</button>
+  </div>
+
+  <div id="tab-input" class="tab-content active card">
+    <h2 id="form-title">新增款項</h2>
+    <input type="hidden" id="record-id">
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+      <input type="date" id="date" required>
+      <input type="text" id="item" placeholder="款項名稱" required>
+      <input type="number" id="amount" placeholder="金額" required>
+      <select id="payer">
+        <option value="小明">小明</option>
+        <option value="小華">小華</option>
+        <option value="小美">小美</option>
+      </select>
+      <button onclick="saveRecord()" style="background: #28a745; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px;">儲存</button>
+      <button onclick="resetForm()" style="background: #6c757d; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px;">取消</button>
+    </div>
+
+    <h3>所有帳目明細</h3>
+    <table>
+      <thead>
+        <tr><th>日期</th><th>款項</th><th>金額</th><th>代墊人</th><th>操作</th></tr>
+      </thead>
+      <tbody id="data-list"></tbody>
+    </table>
+  </div>
+
+  <div id="tab-payer" class="tab-content card">
+    <h2>代墊人總覽</h2>
+    <table>
+      <thead>
+        <tr><th>代墊人</th><th>代墊項目</th><th>總金額</th></tr>
+      </thead>
+      <tbody id="payer-summary"></tbody>
+    </table>
+  </div>
+
+  <div id="tab-month" class="tab-content card">
+    <h2>每月花費總覽</h2>
+    <table>
+      <thead>
+        <tr><th>月份</th><th>總花費金額</th></tr>
+      </thead>
+      <tbody id="month-summary"></tbody>
+    </table>
+  </div>
+
+  <script>
+    // ⚠️ 請替換為您的 Firebase 設定 ⚠️
+   // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBZ0l-GOETrFWhM6C7Ku-JIvI8RWHXIF6A",
+  authDomain: "dailyspending.firebaseapp.com",
+  projectId: "dailyspending",
+  storageBucket: "dailyspending.firebasestorage.app",
+  messagingSenderId: "913420870988",
+  appId: "1:913420870988:web:683a8184fd87b9ea729be9",
+  measurementId: "G-BDTVMFCJYM"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+    
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let allRecords = [];
+
+    // 初始化日期預設為今天
+    document.getElementById('date').valueAsDate = new Date();
+
+    // 監聽 Firebase 資料庫變更 (即時同步)
+    db.collection("expenses").onSnapshot((snapshot) => {
+      allRecords = [];
+      snapshot.forEach((doc) => {
+        allRecords.push({ id: doc.id, ...doc.data() });
+      });
+      renderAll();
+    });
+
+    // 儲存或更新資料 (新增/編輯鍵)
+    function saveRecord() {
+      const id = document.getElementById('record-id').value;
+      const date = document.getElementById('date').value;
+      const item = document.getElementById('item').value;
+      const amount = Number(document.getElementById('amount').value);
+      const payer = document.getElementById('payer').value;
+
+      if (!date || !item || !amount) return alert("請填寫完整資訊！");
+
+      const data = { date, item, amount, payer };
+
+      if (id) {
+        // 編輯模式
+        db.collection("expenses").doc(id).update(data).then(() => resetForm());
+      } else {
+        // 新增模式
+        db.collection("expenses").add(data).then(() => resetForm());
+      }
+    }
+
+    // 刪除資料 (刪除鍵)
+    function deleteRecord(id) {
+      if (confirm("確定要刪除這筆紀錄嗎？")) {
+        db.collection("expenses").doc(id).delete();
+      }
+    }
+
+    // 載入資料到表單 (編輯)
+    function editRecord(id) {
+      const item = allRecords.find(r => r.id === id);
+      if (item) {
+        document.getElementById('record-id').value = item.id;
+        document.getElementById('date').value = item.date;
+        document.getElementById('item').value = item.item;
+        document.getElementById('amount').value = item.amount;
+        document.getElementById('payer').value = item.payer;
+        document.getElementById('form-title').innerText = "修改款項";
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('record-id').value = '';
+      document.getElementById('item').value = '';
+      document.getElementById('amount').value = '';
+      document.getElementById('date').valueAsDate = new Date();
+      document.getElementById('form-title').innerText = "新增款項";
+    }
+
+    // 渲染所有分頁資料
+    function renderAll() {
+      // 1. 明細列表
+      const listBody = document.getElementById('data-list');
+      listBody.innerHTML = allRecords.map(r => `
+        <tr>
+          <td>${r.date}</td>
+          <td>${r.item}</td>
+          <td>$${r.amount}</td>
+          <td>${r.payer}</td>
+          <td>
+            <button class="btn-edit" onclick="editRecord('${r.id}')">編輯</button>
+            <button class="btn-delete" onclick="deleteRecord('${r.id}')">刪除</button>
+          </td>
+        </tr>
+      `).join('');
+
+      // 2. 代墊人統計
+      const payerSummary = {};
+      allRecords.forEach(r => {
+        if (!payerSummary[r.payer]) payerSummary[r.payer] = { items: [], total: 0 };
+        payerSummary[r.payer].items.push(r.item);
+        payerSummary[r.payer].total += r.amount;
+      });
+
+      document.getElementById('payer-summary').innerHTML = Object.keys(payerSummary).map(p => `
+        <tr>
+          <td>${p}</td>
+          <td>${payerSummary[p].items.join('、')}</td>
+          <td>$${payerSummary[p].total}</td>
+        </tr>
+      `).join('');
+
+      // 3. 每月統計
+      const monthSummary = {};
+      allRecords.forEach(r => {
+        const month = r.date.substring(0, 7); // 格式 YYYY-MM
+        monthSummary[month] = (monthSummary[month] || 0) + r.amount;
+      });
+
+      document.getElementById('month-summary').innerHTML = Object.keys(monthSummary).map(m => `
+        <tr>
+          <td>${m}</td>
+          <td>$${monthSummary[m]}</td>
+        </tr>
+      `).join('');
+    }
+
+    // 切換分頁 UI
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav button').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      btn.classList.add('active');
+    }
+  </script>
+</body>
+</html>
