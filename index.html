@@ -48,7 +48,6 @@
       <input type="date" id="date" required>
       <input type="text" id="item" placeholder="款項名稱" required>
       <input type="number" id="amount" placeholder="金額" required>
-      <!-- 修改為指定選項：小明、小美、公基金 -->
       <select id="payer">
         <option value="小明">小明</option>
         <option value="小美">小美</option>
@@ -70,7 +69,6 @@
   <!-- 分頁二：代墊金額統計 -->
   <div id="tab-payer" class="tab-content card">
     <h2>代墊金額統計</h2>
-    <!-- 個別代墊人統計區塊 -->
     <div id="payer-summary-container"></div>
   </div>
 
@@ -86,7 +84,8 @@
   </div>
 
   <script>
-    // ⚠️ 請務必將以下欄位替換為您在 Firebase Console 取得的真實 Key ⚠️
+    // ⚠️ 請務必將下方引號內的內容替換為你的 Firebase 真實設定 ⚠️
+   // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyBZ0l-GOETrFWhM6C7Ku-JIvI8RWHXIF6A",
   authDomain: "dailyspending.firebaseapp.com",
@@ -96,6 +95,7 @@ const firebaseConfig = {
   appId: "1:913420870988:web:683a8184fd87b9ea729be9",
   measurementId: "G-BDTVMFCJYM"
 };
+
     let db;
     try {
       firebase.initializeApp(firebaseConfig);
@@ -113,20 +113,24 @@ const firebaseConfig = {
         alert("Firebase 初始化失敗！請檢查你的 firebaseConfig 是否有填寫正確（需保留引號與逗號）。");
         return;
       }
-    // 即時監聽 Firebase 資料庫變更
-    db.collection("expenses").onSnapshot((snapshot) => {
-      allRecords = [];
-      snapshot.forEach((doc) => {
-        allRecords.push({ id: doc.id, ...doc.data() });
+
+      // 即時監聽 Firebase 資料庫變更
+      db.collection("expenses").onSnapshot((snapshot) => {
+        allRecords = [];
+        snapshot.forEach((doc) => {
+          allRecords.push({ id: doc.id, ...doc.data() });
+        });
+        renderAll();
+      }, (error) => {
+        console.error("Firebase 讀取錯誤：", error);
+        alert("資料庫連線失敗！請確認 Firebase Firestore 的 Rules (規則) 是否已允許讀寫 (allow read, write: if true;)。");
       });
-      renderAll();
-    }, (error) => {
-      console.error("Firebase 讀取錯誤：", error);
-      alert("無法連接資料庫，請檢查 Firebase 設定與權限！");
     });
 
     // 儲存或修改資料
     function saveRecord() {
+      if (!db) return alert("資料庫未連線，無法儲存！請檢查 Firebase 設定。");
+
       const id = document.getElementById('record-id').value;
       const date = document.getElementById('date').value;
       const item = document.getElementById('item').value;
@@ -152,6 +156,7 @@ const firebaseConfig = {
 
     // 刪除資料
     function deleteRecord(id) {
+      if (!db) return;
       if (confirm("確定要刪除這筆紀錄嗎？")) {
         db.collection("expenses").doc(id).delete()
           .catch(err => alert("刪除失敗：" + err.message));
@@ -197,10 +202,9 @@ const firebaseConfig = {
         </tr>
       `).join('');
 
-      // 2. 代墊金額統計 (依個人逐一列出明細與總金額)
+      // 2. 代墊金額統計
       const payerContainer = document.getElementById('payer-summary-container');
       const defaultPayers = ["小明", "小美", "公基金"];
-      // 確保即使歷史紀錄包含其他名字也能正常列出
       const allPayers = Array.from(new Set([...defaultPayers, ...allRecords.map(r => r.payer)])).filter(Boolean);
 
       let payerHtml = '';
