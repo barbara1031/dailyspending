@@ -21,9 +21,11 @@
     .form-group input, .form-group select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
     .btn-save { background: #28a745; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-weight: bold; }
     .btn-cancel { background: #6c757d; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    .payer-box { background: #fafafa; border: 1px solid #e0e0e0; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+    .payer-name { margin-top: 0; color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 5px; display: inline-block; }
   </style>
 
-  <!-- 正確載入 Firebase SDK (Compat 相容版本) -->
+  <!-- 載入 Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
@@ -34,11 +36,11 @@
   <!-- 分頁按鈕 -->
   <div class="nav">
     <button class="active" onclick="switchTab('tab-input', this)">📝 明細與編輯</button>
-    <button onclick="switchTab('tab-payer', this)">🧑‍🤝‍🧑 代墊人統計</button>
+    <button onclick="switchTab('tab-payer', this)">🧑‍🤝‍🧑 代墊金額統計</button>
     <button onclick="switchTab('tab-month', this)">📅 每月統計</button>
   </div>
 
-  <!-- 分頁一：輸入與明細列表 (支援新增/編輯/刪除) -->
+  <!-- 分頁一：輸入與明細列表 -->
   <div id="tab-input" class="tab-content active card">
     <h2 id="form-title">新增款項</h2>
     <input type="hidden" id="record-id">
@@ -46,6 +48,7 @@
       <input type="date" id="date" required>
       <input type="text" id="item" placeholder="款項名稱" required>
       <input type="number" id="amount" placeholder="金額" required>
+      <!-- 修改為指定選項：小明、小美、公基金 -->
       <select id="payer">
         <option value="小明">小明</option>
         <option value="小美">小美</option>
@@ -64,15 +67,11 @@
     </table>
   </div>
 
-  <!-- 分頁二：代墊人統計 -->
+  <!-- 分頁二：代墊金額統計 -->
   <div id="tab-payer" class="tab-content card">
-    <h2>代墊人總覽</h2>
-    <table>
-      <thead>
-        <tr><th>代墊人</th><th>代墊項目</th><th>總金額</th></tr>
-      </thead>
-      <tbody id="payer-summary"></tbody>
-    </table>
+    <h2>代墊金額統計</h2>
+    <!-- 個別代墊人統計區塊 -->
+    <div id="payer-summary-container"></div>
   </div>
 
   <!-- 分頁三：每月統計 -->
@@ -87,8 +86,8 @@
   </div>
 
   <script>
-    // ⚠️ 貼上後，請務必將以下欄位替換為您在 Firebase Console 取得的真實 Key ⚠️
-   // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    // ⚠️ 請務必將以下欄位替換為您在 Firebase Console 取得的真實 Key ⚠️
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyBZ0l-GOETrFWhM6C7Ku-JIvI8RWHXIF6A",
   authDomain: "dailyspending.firebaseapp.com",
@@ -99,17 +98,6 @@ const firebaseConfig = {
   measurementId: "G-BDTVMFCJYM"
 };
 
-    // 正確使用 firebase.initializeApp 避免 ReferenceError
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-
-    let allRecords = [];
-
-    // 頁面載入完成後將預設日期設為今天
-    document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById('date').valueAsDate = new Date();
-    });
-
     // 即時監聽 Firebase 資料庫變更
     db.collection("expenses").onSnapshot((snapshot) => {
       allRecords = [];
@@ -119,7 +107,7 @@ const firebaseConfig = {
       renderAll();
     }, (error) => {
       console.error("Firebase 讀取錯誤：", error);
-      alert("無法連接資料庫，請檢查 Firebase 設定檔與 Rules 安全規則是否有開啟寫入權限！");
+      alert("無法連接資料庫，請檢查 Firebase 設定與權限！");
     });
 
     // 儲存或修改資料
@@ -137,12 +125,10 @@ const firebaseConfig = {
       const data = { date, item, amount, payer };
 
       if (id) {
-        // 編輯更新
         db.collection("expenses").doc(id).update(data)
           .then(() => resetForm())
           .catch(err => alert("修改失敗：" + err.message));
       } else {
-        // 新增資料
         db.collection("expenses").add(data)
           .then(() => resetForm())
           .catch(err => alert("新增失敗：" + err.message));
@@ -157,7 +143,7 @@ const firebaseConfig = {
       }
     }
 
-    // 點擊「編輯」填入資料
+    // 編輯資料
     function editRecord(id) {
       const item = allRecords.find(r => r.id === id);
       if (item) {
@@ -196,21 +182,46 @@ const firebaseConfig = {
         </tr>
       `).join('');
 
-      // 2. 代墊人統計
-      const payerSummary = {};
-      allRecords.forEach(r => {
-        if (!payerSummary[r.payer]) payerSummary[r.payer] = { items: [], total: 0 };
-        payerSummary[r.payer].items.push(r.item);
-        payerSummary[r.payer].total += r.amount;
-      });
+      // 2. 代墊金額統計 (依個人逐一列出明細與總金額)
+      const payerContainer = document.getElementById('payer-summary-container');
+      const defaultPayers = ["小明", "小美", "公基金"];
+      // 確保即使歷史紀錄包含其他名字也能正常列出
+      const allPayers = Array.from(new Set([...defaultPayers, ...allRecords.map(r => r.payer)])).filter(Boolean);
 
-      document.getElementById('payer-summary').innerHTML = Object.keys(payerSummary).map(p => `
-        <tr>
-          <td>${p}</td>
-          <td>${payerSummary[p].items.join('、')}</td>
-          <td>$${payerSummary[p].total}</td>
-        </tr>
-      `).join('');
+      let payerHtml = '';
+      allPayers.forEach(payer => {
+        const payerRecords = allRecords.filter(r => r.payer === payer);
+        const totalAmount = payerRecords.reduce((sum, r) => sum + r.amount, 0);
+
+        payerHtml += `
+          <div class="payer-box">
+            <h3 class="payer-name">代墊人：${payer}</h3>
+            ${payerRecords.length === 0 ? '<p style="color: #888;">目前尚無代墊紀錄</p>' : `
+              <table>
+                <thead>
+                  <tr><th>日期</th><th>代墊項目</th><th>金額</th></tr>
+                </thead>
+                <tbody>
+                  ${payerRecords.map(r => `
+                    <tr>
+                      <td>${r.date}</td>
+                      <td>${r.item}</td>
+                      <td>$${r.amount}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+                <tfoot>
+                  <tr style="background: #f0f0f0; font-weight: bold;">
+                    <td colspan="2" style="text-align: right;">總共代墊金額：</td>
+                    <td style="color: #dc3545; font-size: 16px;">$${totalAmount}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            `}
+          </div>
+        `;
+      });
+      payerContainer.innerHTML = payerHtml;
 
       // 3. 每月統計
       const monthSummary = {};
